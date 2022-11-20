@@ -6,6 +6,11 @@
 //
 
 import UIKit
+import SwiftUI
+
+var pushViewToNavigation: ((_ view: any View) -> Void) = { _ in }
+var shareFile: ((_ url: URL) -> Void) = { _ in }
+var selectFile: (() -> Void) = {}
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
@@ -13,10 +18,31 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-    // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
-    // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
-    // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
-    guard let _ = (scene as? UIWindowScene) else { return }
+    guard let scene = (scene as? UIWindowScene) else { return }
+    
+    let window = UIWindow(windowScene: scene)
+    let navigationView = NavigationView()
+    window.rootViewController = navigationView
+    window.makeKeyAndVisible()
+    
+    self.window = window
+    
+    navigationView.push(view: MainView())
+    
+    pushViewToNavigation = { view in
+      navigationView.push(view: view)
+    }
+    
+    shareFile = { url in
+      let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+      navigationView.present(activityVC, animated: true)
+    }
+    
+    selectFile = {
+      let docVC = UIDocumentPickerViewController(forOpeningContentTypes: [.data])
+      docVC.delegate = self
+      navigationView.present(docVC, animated: true)
+    }
   }
 
   func sceneDidDisconnect(_ scene: UIScene) {
@@ -50,3 +76,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 }
 
+extension SceneDelegate: UIDocumentPickerDelegate,UINavigationControllerDelegate {
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    guard let url = urls.first else { return }
+    guard let data = try? Data(contentsOf: url) else { return }
+    guard let quest = try? JSONDecoder().decode(QuestStepNode.self, from: data) else { return }
+    
+    guard let data = try? JSONEncoder().encode(quest) else { return }
+    
+    let path = FileManager.default.urls(for: .documentDirectory,
+                                        in: .userDomainMask)[0].appendingPathComponent(url.lastPathComponent)
+    try? data.write(to: path)
+    
+    pushViewToNavigation(PlayerView(questStep: quest))
+  }
+}
